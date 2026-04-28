@@ -1,0 +1,125 @@
+---
+# mediamtx fungiert als "fake camera" - akzeptiert RTSP publish und liefert RTSP playback
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx
+  namespace: nginx-rtmp-server
+  labels:
+    app: mediamtx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+    spec:
+      containers:
+        - name: mediamtx
+          image: bluenviron/mediamtx:1.9.3
+          ports:
+            - name: rtsp
+              containerPort: 8554
+          env:
+            - name: MTX_RTSPADDRESS
+              value: ":8554"
+            - name: MTX_RTMPDISABLE
+              value: "yes"
+            - name: MTX_HLSDISABLE
+              value: "yes"
+            - name: MTX_WEBRTCDISABLE
+              value: "yes"
+            - name: MTX_SRTDISABLE
+              value: "yes"
+            - name: MTX_API
+              value: "no"
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 300m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx
+  namespace: nginx-rtmp-server
+spec:
+  selector:
+    app: mediamtx
+  ports:
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+---
+# Publisher: ffmpeg pusht ein Testpattern als RTSP an mediamtx
+# -> liefert dann z.B. rtsp://mediamtx.nginx-rtmp-server.svc:8554/cam01
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtsp-test-source
+  namespace: nginx-rtmp-server
+  labels:
+    app: rtsp-test-source
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rtsp-test-source
+  template:
+    metadata:
+      labels:
+        app: rtsp-test-source
+    spec:
+      containers:
+        - name: publisher
+          image: ghcr.io/eumel8/rtsp-forwarder:latest
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              # Warten bis mediamtx steht
+              until (echo > /dev/tcp/mediamtx/8554) 2>/dev/null; do
+                echo "warte auf mediamtx..."; sleep 2
+              done
+              echo "mediamtx erreichbar, pushe testpattern"
+              # H.264 + AAC Testpattern fuer Kamera 01 (copy-Test)
+              # Sinus-Audio + Farbbalken bei 25fps
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -re -f lavfi -i "testsrc2=size=640x360:rate=25" \
+                  -re -f lavfi -i "sine=frequency=1000:sample_rate=44100" \
+                  -c:v libx264 -preset veryfast -tune zerolatency -g 50 -pix_fmt yuv420p \
+                  -c:a aac -b:a 96k -ar 44100 \
+                  -f rtsp -rtsp_transport tcp \
+                  rtsp://mediamtx:8554/cam01 || true
+                echo "ffmpeg beendet, restart in 3s"; sleep 3
+              done
+          resources:
+            requests: { cpu: 200m, memory: 128Mi }
+            limits:   { cpu: 800m, memory: 256Mi }
+        - name: publisher2
+          image: ghcr.io/eumel8/rtsp-forwarder:latest
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              until (echo > /dev/tcp/mediamtx/8554) 2>/dev/null; do
+                echo "warte auf mediamtx..."; sleep 2
+              done
+              echo "mediamtx erreichbar, pushe HEVC testpattern fuer transcode-Kamera"
+              # HEVC/H.265 Testpattern -> erzwingt transcode-Pfad
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -re -f lavfi -i "testsrc2=size=640x360:rate=25" \
+                  -re -f lavfi -i "sine=frequency=440:sample_rate=44100" \
+                  -c:v libx265 -preset veryfast -x265-params log-level=error -g 50 -pix_fmt yuv420p \
+                  -c:a aac -b:a 96k -ar 44100 \
+                  -f rtsp -rtsp_transport tcp \
+                  rtsp://mediamtx:8554/cam02 || true
+                echo "ffmpeg beendet, restart in 3s"; sleep 3
+              done
+          resources:
+            requests: { cpu: 300m, memory: 128Mi }
+            limits:   { cpu: 1500m, memory: 512Mi }

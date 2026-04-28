@@ -1,0 +1,68 @@
+# Default values for rtsp-forwarder.
+# Pro Kamera ein Eintrag unter `cameras`. Es wird je Kamera ein Deployment erzeugt.
+
+image:
+  repository: ghcr.io/eumel8/rtsp-forwarder
+  tag: ""               # default: "latest" (override per release, e.g. "main", "sha-abc1234", or a semver "1.0.0")
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Globale Defaults, die jede Kamera überschreiben kann
+defaults:
+  mode: copy            # "copy" oder "transcode"
+  loglevel: warning
+  videoBitrate: "2000k"
+  audioBitrate: "128k"
+  preset: veryfast
+  gop: "50"
+  resources:
+    copy:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    transcode:
+      requests:
+        cpu: 500m
+        memory: 256Mi
+      limits:
+        cpu: "1500m"
+        memory: 512Mi
+
+# Liste der Kameras. Beispiel:
+# cameras:
+#   - name: cam01
+#     rtspUrl: "rtsp://user:pass@10.0.0.20:554/Streaming/Channels/101"
+#     rtmpUrl: "rtmp://nginx-rtmp.media.svc.cluster.local:1935/live/cam01"
+#     mode: copy
+#   - name: cam02
+#     rtspUrl: "rtsp://user:pass@10.0.0.21:554/cam/realmonitor?channel=1&subtype=0"
+#     rtmpUrl: "rtmp://nginx-rtmp.media.svc.cluster.local:1935/live/cam02"
+#     mode: transcode
+#     videoBitrate: "2500k"
+#   - name: cam03
+#     rtspUrl: "http://192.168.0.137:36773/videostream.cgi?user=admin&pwd=secret"
+#     rtmpUrl: "rtmp://nginx-rtmp.media.svc.cluster.local:1935/live/cam03"
+#     inputType: http-mjpeg     # rtsp | rtmp | http-mjpeg | auto (default)
+#     inputFps: "15"            # Framerate fuer MJPEG-Quellen
+#     mode: transcode           # MJPEG erzwingt transcode automatisch
+cameras: []
+
+# Wenn true, werden RTSP_URL/RTMP_URL je Kamera als Secret abgelegt und per envFrom eingebunden
+useSecrets: false
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

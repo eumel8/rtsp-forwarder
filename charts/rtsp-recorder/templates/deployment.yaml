@@ -1,0 +1,90 @@
+{{- range $cam := .Values.cameras }}
+{{- $res := default $.Values.defaults.resources $cam.resources -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rtsp-recorder.fullname" $ }}-{{ $cam.name }}
+  labels:
+    {{- include "rtsp-recorder.labels" $ | nindent 4 }}
+    camera: {{ $cam.name | quote }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "rtsp-recorder.name" $ }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      camera: {{ $cam.name | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "rtsp-recorder.labels" $ | nindent 8 }}
+        camera: {{ $cam.name | quote }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Always
+      securityContext:
+        runAsNonRoot: {{ $.Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ $.Values.securityContext.runAsUser }}
+        fsGroup: {{ $.Values.securityContext.fsGroup }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: recorder
+          image: {{ include "rtsp-recorder.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - name: CAMERA_NAME
+              value: {{ $cam.name | quote }}
+            - name: SEGMENT_TIME
+              value: {{ default $.Values.defaults.segmentTime $cam.segmentTime | quote }}
+            - name: RETENTION_DAYS
+              value: {{ default $.Values.defaults.retentionDays $cam.retentionDays | quote }}
+            - name: CLEAN_INTERVAL
+              value: {{ default $.Values.defaults.cleanInterval $cam.cleanInterval | quote }}
+            - name: LOGLEVEL
+              value: {{ default $.Values.defaults.loglevel $cam.loglevel | quote }}
+            - name: REC_DIR
+              value: "/recordings"
+            {{- if not $.Values.useSecrets }}
+            - name: SOURCE_URL
+              value: {{ required (printf "cameras[%s].sourceUrl is required" $cam.name) $cam.sourceUrl | quote }}
+            {{- end }}
+          {{- if $.Values.useSecrets }}
+          envFrom:
+            - secretRef:
+                name: {{ include "rtsp-recorder.fullname" $ }}-{{ $cam.name }}
+          {{- end }}
+          volumeMounts:
+            - name: recordings
+              mountPath: /recordings
+          resources:
+            {{- toYaml $res | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: {{ $.Values.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              {{- toYaml $.Values.securityContext.capabilities | nindent 14 }}
+      volumes:
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: {{ include "rtsp-recorder.fullname" $ }}-{{ $cam.name }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{ end }}

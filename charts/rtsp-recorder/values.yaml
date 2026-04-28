@@ -1,0 +1,47 @@
+image:
+  repository: ghcr.io/eumel8/rtsp-recorder
+  tag: ""               # default: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+defaults:
+  segmentTime: "3600"      # 1h pro File
+  retentionDays: "30"
+  cleanInterval: "21600"   # 6h
+  loglevel: warning
+  storage:
+    storageClass: "local-path"
+    size: "10Gi"
+    accessMode: "ReadWriteOnce"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+# Liste der Kameras. Beispiel:
+# cameras:
+#   - name: cam01
+#     sourceUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam01"
+#     storage:
+#       size: "100Gi"
+#     retentionDays: "30"
+cameras: []
+
+useSecrets: false
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]

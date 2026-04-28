@@ -1,0 +1,20 @@
+{{- range $cam := .Values.cameras }}
+{{- $sc := default $.Values.defaults.storage.storageClass (and $cam.storage $cam.storage.storageClass) -}}
+{{- $size := default $.Values.defaults.storage.size (and $cam.storage $cam.storage.size) -}}
+{{- $accessMode := default $.Values.defaults.storage.accessMode (and $cam.storage $cam.storage.accessMode) -}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rtsp-recorder.fullname" $ }}-{{ $cam.name }}
+  labels:
+    {{- include "rtsp-recorder.labels" $ | nindent 4 }}
+    camera: {{ $cam.name | quote }}
+spec:
+  accessModes:
+    - {{ $accessMode | quote }}
+  storageClassName: {{ $sc | quote }}
+  resources:
+    requests:
+      storage: {{ $size | quote }}
+{{ end }}

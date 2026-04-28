@@ -1,0 +1,18 @@
+apiVersion: v2
+name: rtsp-recorder
+description: Records RTMP/RTSP streams as rolling MP4 segments to a PVC per camera
+type: application
+version: 0.1.1
+appVersion: "1.0.0"
+keywords:
+  - rtsp
+  - rtmp
+  - recording
+  - ffmpeg
+  - camera
+home: https://github.com/eumel8/rtsp-forwarder
+sources:
+  - https://github.com/eumel8/rtsp-forwarder
+maintainers:
+  - name: eumel8
+    url: https://github.com/eumel8

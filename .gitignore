@@ -1,0 +1,5 @@
+*.tgz
+.cr-release-packages/
+.idea/
+.vscode/
+*.swp

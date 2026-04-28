@@ -1,0 +1,101 @@
+{{- range $cam := .Values.cameras }}
+{{- $mode := default $.Values.defaults.mode $cam.mode -}}
+{{- $resKey := ternary "transcode" "copy" (eq $mode "transcode") -}}
+{{- $res := default (index $.Values.defaults.resources $resKey) $cam.resources -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rtsp-forwarder.fullname" $ }}-{{ $cam.name }}
+  labels:
+    {{- include "rtsp-forwarder.labels" $ | nindent 4 }}
+    camera: {{ $cam.name | quote }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "rtsp-forwarder.name" $ }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      camera: {{ $cam.name | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "rtsp-forwarder.labels" $ | nindent 8 }}
+        camera: {{ $cam.name | quote }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Always
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ffmpeg
+          image: {{ include "rtsp-forwarder.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - name: MODE
+              value: {{ $mode | quote }}
+            - name: LOGLEVEL
+              value: {{ default $.Values.defaults.loglevel $cam.loglevel | quote }}
+            - name: VIDEO_BITRATE
+              value: {{ default $.Values.defaults.videoBitrate $cam.videoBitrate | quote }}
+            - name: AUDIO_BITRATE
+              value: {{ default $.Values.defaults.audioBitrate $cam.audioBitrate | quote }}
+            - name: PRESET
+              value: {{ default $.Values.defaults.preset $cam.preset | quote }}
+            - name: GOP
+              value: {{ default $.Values.defaults.gop $cam.gop | quote }}
+            {{- if $cam.inputType }}
+            - name: INPUT_TYPE
+              value: {{ $cam.inputType | quote }}
+            {{- end }}
+            {{- if $cam.inputFps }}
+            - name: INPUT_FPS
+              value: {{ $cam.inputFps | quote }}
+            {{- end }}
+            {{- if $cam.rwTimeout }}
+            - name: RW_TIMEOUT
+              value: {{ $cam.rwTimeout | quote }}
+            {{- end }}
+            {{- if $cam.extraInput }}
+            - name: EXTRA_INPUT
+              value: {{ $cam.extraInput | quote }}
+            {{- end }}
+            {{- if $cam.extraOutput }}
+            - name: EXTRA_OUTPUT
+              value: {{ $cam.extraOutput | quote }}
+            {{- end }}
+            {{- if not $.Values.useSecrets }}
+            - name: RTSP_URL
+              value: {{ required (printf "cameras[%s].rtspUrl is required" $cam.name) $cam.rtspUrl | quote }}
+            - name: RTMP_URL
+              value: {{ required (printf "cameras[%s].rtmpUrl is required" $cam.name) $cam.rtmpUrl | quote }}
+            {{- end }}
+          {{- if $.Values.useSecrets }}
+          envFrom:
+            - secretRef:
+                name: {{ include "rtsp-forwarder.fullname" $ }}-{{ $cam.name }}
+          {{- end }}
+          resources:
+            {{- toYaml $res | nindent 12 }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{ end }}

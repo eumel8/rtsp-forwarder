@@ -1,0 +1,117 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: media
+---
+# Kamera 1 - copy/remux (Kamera liefert bereits H.264/AAC)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtsp-forwarder-cam01
+  namespace: media
+  labels:
+    app: rtsp-forwarder
+    camera: cam01
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # nur eine Instanz pro Stream
+  selector:
+    matchLabels:
+      app: rtsp-forwarder
+      camera: cam01
+  template:
+    metadata:
+      labels:
+        app: rtsp-forwarder
+        camera: cam01
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: ffmpeg
+          image: ghcr.io/eumel8/rtsp-forwarder:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: RTSP_URL
+              value: "rtsp://USER:PASS@10.0.0.20:554/Streaming/Channels/101"
+            - name: RTMP_URL
+              value: "rtmp://nginx-rtmp.media.svc.cluster.local:1935/live/cam01"
+            - name: MODE
+              value: "copy"
+            - name: LOGLEVEL
+              value: "warning"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+# Kamera 2 - transcode (z.B. Kamera mit H.265 -> H.264 für RTMP)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtsp-forwarder-cam02
+  namespace: media
+  labels:
+    app: rtsp-forwarder
+    camera: cam02
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rtsp-forwarder
+      camera: cam02
+  template:
+    metadata:
+      labels:
+        app: rtsp-forwarder
+        camera: cam02
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: ffmpeg
+          image: ghcr.io/eumel8/rtsp-forwarder:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: RTSP_URL
+              value: "rtsp://USER:PASS@10.0.0.21:554/cam/realmonitor?channel=1&subtype=0"
+            - name: RTMP_URL
+              value: "rtmp://nginx-rtmp.media.svc.cluster.local:1935/live/cam02"
+            - name: MODE
+              value: "transcode"
+            - name: VIDEO_BITRATE
+              value: "2500k"
+            - name: AUDIO_BITRATE
+              value: "128k"
+            - name: PRESET
+              value: "veryfast"
+            - name: GOP
+              value: "50"
+            - name: LOGLEVEL
+              value: "warning"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "1500m"
+              memory: "512Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

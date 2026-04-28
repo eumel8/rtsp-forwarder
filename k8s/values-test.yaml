@@ -1,0 +1,29 @@
+cameras:
+  - name: cam01
+    rtspUrl: "rtsp://mediamtx.nginx-rtmp-server.svc.cluster.local:8554/cam01"
+    rtmpUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam01"
+    mode: copy
+
+  - name: cam02
+    rtspUrl: "rtsp://mediamtx.nginx-rtmp-server.svc.cluster.local:8554/cam02"
+    rtmpUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam02"
+    mode: transcode
+    videoBitrate: "1500k"
+
+  - name: cam03
+    rtspUrl: "http://192.168.0.137:44147/videostream.cgi?user=admin&pwd=secret"
+    rtmpUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam03"
+    inputType: http-mjpeg
+    inputFps: "5"
+    rwTimeout: "8000000"          # 8s ohne Bytes -> Restart
+    mode: transcode
+    videoBitrate: "600k"
+    gop: "10"                     # bei 5fps = Keyframe alle 2s
+    preset: ultrafast
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi

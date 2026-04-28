@@ -1,0 +1,14 @@
+cameras:
+  - name: cam01
+    sourceUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam01"
+    storage:
+      size: "10Gi"
+    segmentTime: "300"        # Test: 5min Segmente statt 1h
+    retentionDays: "7"
+
+  - name: cam02
+    sourceUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam02"
+    storage:
+      size: "10Gi"
+    segmentTime: "300"
+    retentionDays: "7"

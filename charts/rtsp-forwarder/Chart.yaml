@@ -1,0 +1,18 @@
+apiVersion: v2
+name: rtsp-forwarder
+description: Forwards RTSP camera streams to an nginx-RTMP server via ffmpeg
+type: application
+version: 0.2.1
+appVersion: "1.0.0"
+keywords:
+  - rtsp
+  - rtmp
+  - ffmpeg
+  - streaming
+  - camera
+home: https://github.com/eumel8/rtsp-forwarder
+sources:
+  - https://github.com/eumel8/rtsp-forwarder
+maintainers:
+  - name: eumel8
+    url: https://github.com/eumel8

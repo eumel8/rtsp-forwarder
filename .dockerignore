@@ -1,0 +1,7 @@
+.git
+.github
+*.md
+charts
+k8s
+.gitignore
+.dockerignore

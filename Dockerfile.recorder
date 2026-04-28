@@ -1,0 +1,12 @@
+# Recorder-Image: identisch zum Forwarder, nur anderer Entrypoint
+FROM alpine:3.20
+
+RUN apk add --no-cache ffmpeg bash tini ca-certificates findutils \
+    && adduser -D -u 10001 ffmpeg
+
+COPY recorder.sh /usr/local/bin/recorder.sh
+RUN chmod +x /usr/local/bin/recorder.sh
+
+USER ffmpeg
+
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/recorder.sh"]

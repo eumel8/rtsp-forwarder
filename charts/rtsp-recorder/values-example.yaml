@@ -1,0 +1,12 @@
+cameras:
+  - name: cam01
+    sourceUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam01"
+    storage:
+      size: "10Gi"
+    retentionDays: "7"
+
+  - name: cam02
+    sourceUrl: "rtmp://nginx-rtmp-server.nginx-rtmp-server.svc.cluster.local:1935/live/cam02"
+    storage:
+      size: "10Gi"
+    retentionDays: "7"
