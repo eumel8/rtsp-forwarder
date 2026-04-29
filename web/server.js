@@ -55,7 +55,21 @@ function safeFile(file) {
 }
 
 async function listFiles(cam) {
-  const dir = path.join(RECORDINGS_DIR, cam);
+  const base = path.join(RECORDINGS_DIR, cam);
+  // Some recorder setups create a redundant <cam>/<cam>/ subfolder; prefer it
+  // when present so we don't list an empty directory. Falls back to the base
+  // dir for the clean layout.
+  let dir = base;
+  try {
+    const nested = path.join(base, cam);
+    const st = await fs.stat(nested);
+    if (st.isDirectory()) {
+      const inner = await fs.readdir(nested);
+      if (inner.some((n) => n.endsWith('.mp4'))) dir = nested;
+    }
+  } catch {
+    /* no nested dir */
+  }
   try {
     const names = await fs.readdir(dir);
     const files = await Promise.all(
@@ -68,6 +82,7 @@ async function listFiles(cam) {
             name,
             size: st.size,
             mtime: st.mtime,
+            _dir: dir,
           };
         }),
     );
@@ -76,6 +91,18 @@ async function listFiles(cam) {
   } catch {
     return [];
   }
+}
+
+// resolve absolute path of a recording file, honouring nested layout
+async function resolveFile(cam, file) {
+  const candidates = [
+    path.join(RECORDINGS_DIR, cam, file),
+    path.join(RECORDINGS_DIR, cam, cam, file),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
 }
 
 function ffprobe(filePath) {
@@ -219,16 +246,16 @@ app.get('/cam/:cam', async (req, res) => {
 app.get('/cam/:cam/:file/info', async (req, res) => {
   const { cam, file } = req.params;
   if (!safeCam(cam) || !safeFile(file)) return res.status(400).json({ error: 'bad name' });
-  const full = path.join(RECORDINGS_DIR, cam, file);
-  if (!existsSync(full)) return res.status(404).json({ error: 'not found' });
+  const full = await resolveFile(cam, file);
+  if (!full) return res.status(404).json({ error: 'not found' });
   res.json(await videoInfo(full));
 });
 
 app.get('/cam/:cam/:file/thumbnail', async (req, res) => {
   const { cam, file } = req.params;
   if (!safeCam(cam) || !safeFile(file)) return res.status(400).end();
-  const src = path.join(RECORDINGS_DIR, cam, file);
-  if (!existsSync(src)) return res.status(404).end();
+  const src = await resolveFile(cam, file);
+  if (!src) return res.status(404).end();
   const dst = thumbnailPath(cam, file);
   if (!existsSync(dst)) {
     try {
@@ -248,11 +275,11 @@ app.get('/cam/:cam/:file/play', (req, res) => {
 });
 
 // Range-Request fähiger Streamer
-app.get('/cam/:cam/:file/stream', (req, res) => {
+app.get('/cam/:cam/:file/stream', async (req, res) => {
   const { cam, file } = req.params;
   if (!safeCam(cam) || !safeFile(file)) return res.status(400).end();
-  const full = path.join(RECORDINGS_DIR, cam, file);
-  if (!existsSync(full)) return res.status(404).end();
+  const full = await resolveFile(cam, file);
+  if (!full) return res.status(404).end();
 
   const st = statSync(full);
   const total = st.size;
@@ -283,11 +310,11 @@ app.get('/cam/:cam/:file/stream', (req, res) => {
   createReadStream(full, { start, end }).pipe(res);
 });
 
-app.get('/cam/:cam/:file/download', (req, res) => {
+app.get('/cam/:cam/:file/download', async (req, res) => {
   const { cam, file } = req.params;
   if (!safeCam(cam) || !safeFile(file)) return res.status(400).end();
-  const full = path.join(RECORDINGS_DIR, cam, file);
-  if (!existsSync(full)) return res.status(404).end();
+  const full = await resolveFile(cam, file);
+  if (!full) return res.status(404).end();
   res.download(full, file);
 });
 
@@ -295,8 +322,8 @@ app.delete('/cam/:cam/:file', async (req, res) => {
   if (!ALLOW_DELETE) return res.status(403).json({ error: 'delete disabled' });
   const { cam, file } = req.params;
   if (!safeCam(cam) || !safeFile(file)) return res.status(400).json({ error: 'bad name' });
-  const full = path.join(RECORDINGS_DIR, cam, file);
-  if (!existsSync(full)) return res.status(404).json({ error: 'not found' });
+  const full = await resolveFile(cam, file);
+  if (!full) return res.status(404).json({ error: 'not found' });
   try {
     await fs.unlink(full);
     // Thumbnail-Cache mit weg
