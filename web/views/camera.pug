@@ -1,0 +1,45 @@
+extends layout
+
+block content
+  .flex.items-center.justify-between.mb-6
+    div
+      h1.text-3xl.font-bold= cam
+      p.text-sm.text-gray-400 #{files.length} recordings
+    a.text-sm.text-gray-400(class="hover:text-gray-200" href="/") &larr; back
+
+  if files.length === 0
+    p.text-gray-400 No recordings yet.
+  else
+    div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4")
+      each f in files
+        .rounded-lg.bg-gray-800.overflow-hidden.flex.flex-col(data-file=f.name)
+          a.block.relative.bg-black(href="/cam/" + cam + "/" + f.name + "/play")
+            img.w-full.h-40.object-cover.opacity-90(src="/cam/" + cam + "/" + f.name + "/thumbnail" loading="lazy" onerror="this.style.display='none'")
+            .absolute.inset-0.flex.items-center.justify-center.pointer-events-none
+              div(class="bg-black/50 rounded-full w-12 h-12 flex items-center justify-center")
+                span.text-white.text-xl ▶
+          .p-3.flex-1.flex.flex-col.gap-1
+            .text-sm.font-mono.truncate(title=f.name)= f.name
+            .text-xs.text-gray-400= new Date(f.mtime).toLocaleString()
+            .text-xs.text-gray-400= fmtSize(f.size)
+          .px-3.pb-3.flex.gap-2
+            a.flex-1.text-center.text-xs.py-1.rounded.bg-gray-700(class="hover:bg-gray-600" href="/cam/" + cam + "/" + f.name + "/play") play
+            a.text-xs.py-1.px-2.rounded.bg-gray-700(class="hover:bg-gray-600" href="/cam/" + cam + "/" + f.name + "/download") ⤓
+            if allowDelete
+              button.text-xs.py-1.px-2.rounded.bg-red-700(class="hover:bg-red-600" type="button" data-delete=f.name) ✕
+
+  if allowDelete
+    script.
+      document.querySelectorAll('button[data-delete]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const file = btn.dataset.delete;
+          if (!confirm('Delete ' + file + '?')) return;
+          const r = await fetch(location.pathname + '/' + encodeURIComponent(file), { method: 'DELETE' });
+          if (r.ok) {
+            btn.closest('[data-file]').remove();
+          } else {
+            const j = await r.json().catch(() => ({}));
+            alert('Delete failed: ' + (j.error || r.status));
+          }
+        });
+      });

@@ -1,0 +1,84 @@
+image:
+  repository: ghcr.io/eumel8/recordings-web
+  tag: ""               # default: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+# Title shown in the UI navbar
+title: "Recordings"
+
+# Allow delete in the UI (also enforced server-side)
+allowDelete: true
+
+# Cameras the UI should expose. Each entry mounts an existing PVC
+# (typically the one created by the rtsp-recorder chart) under
+# /recordings/<name>.
+#
+# Example:
+# cameras:
+#   - name: cam01
+#     existingClaim: rec-rtsp-recorder-cam01
+#   - name: cam02
+#     existingClaim: rec-rtsp-recorder-cam02
+cameras: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: recordings-web-basic-auth
+    # nginx.ingress.kubernetes.io/auth-realm: "Recordings"
+  hosts:
+    - host: recordings.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Optional: create a basic-auth secret for nginx-ingress.
+# Provide htpasswd-formatted content (e.g. produced by `htpasswd -nb user pass`)
+# either inline (basicAuth.htpasswd) or via existingSecret.
+basicAuth:
+  enabled: false
+  existingSecret: ""
+  htpasswd: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Persistent thumbnail cache (optional). If disabled, an emptyDir is used
+# and thumbnails are regenerated on pod restart.
+thumbnailCache:
+  enabled: false
+  storageClass: "local-path"
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true

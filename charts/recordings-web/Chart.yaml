@@ -1,0 +1,18 @@
+apiVersion: v2
+name: recordings-web
+description: Web UI to browse, play and delete recorded camera MP4 segments
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - cctv
+  - recordings
+  - web
+  - player
+  - ffmpeg
+home: https://github.com/eumel8/rtsp-forwarder
+sources:
+  - https://github.com/eumel8/rtsp-forwarder
+maintainers:
+  - name: eumel8
+    url: https://github.com/eumel8

@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recordings-web.fullname" . }}
+  labels:
+    {{- include "recordings-web.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "recordings-web.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "recordings-web.labels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Always
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "recordings-web.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: TITLE
+              value: {{ .Values.title | quote }}
+            - name: ALLOW_DELETE
+              value: {{ .Values.allowDelete | quote }}
+            - name: RECORDINGS_DIR
+              value: "/recordings"
+            - name: THUMB_DIR
+              value: "/var/cache/thumbs"
+            - name: CAMERAS
+              value: {{ range $i, $c := .Values.cameras }}{{ if $i }},{{ end }}{{ $c.name }}{{ end }}
+          volumeMounts:
+            {{- range $cam := .Values.cameras }}
+            - name: rec-{{ $cam.name }}
+              mountPath: /recordings/{{ $cam.name }}
+              readOnly: {{ not $.Values.allowDelete }}
+            {{- end }}
+            - name: thumbs
+              mountPath: /var/cache/thumbs
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              {{- toYaml .Values.securityContext.capabilities | nindent 14 }}
+      volumes:
+        {{- range $cam := .Values.cameras }}
+        - name: rec-{{ $cam.name }}
+          persistentVolumeClaim:
+            claimName: {{ required (printf "cameras[%s].existingClaim is required" $cam.name) $cam.existingClaim }}
+        {{- end }}
+        - name: thumbs
+          {{- if .Values.thumbnailCache.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "recordings-web.fullname" . }}-thumbs
+          {{- else }}
+          emptyDir:
+            sizeLimit: 512Mi
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,14 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1")
+    title= title
+    script(src="https://cdn.tailwindcss.com")
+  body.bg-gray-900.text-gray-100.min-h-screen
+    nav.bg-gray-950.border-b.border-gray-800
+      .max-w-6xl.mx-auto.px-4.py-3.flex.items-center.justify-between
+        a.font-bold.text-lg(href="/")= title
+        .text-sm.text-gray-400 #{'/recordings'}
+    main.max-w-6xl.mx-auto.px-4.py-6
+      block content

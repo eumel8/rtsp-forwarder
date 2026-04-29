@@ -1,0 +1,50 @@
+extends layout
+
+block content
+  .flex.items-center.justify-between.mb-4
+    div
+      h1.text-2xl.font-bold= cam + ' / ' + file
+    .flex.gap-3
+      a.text-sm.text-gray-400(class="hover:text-gray-200" href="/cam/" + cam) &larr; back
+      a.text-sm.text-gray-400(class="hover:text-gray-200" href="/cam/" + cam + "/" + file + "/download") download
+
+  .bg-black.rounded-lg.overflow-hidden
+    video.w-full(class="max-h-[80vh]" controls preload="metadata" autoplay)
+      source(src="/cam/" + cam + "/" + file + "/stream" type="video/mp4")
+
+  h2.text-lg.font-semibold.mt-6.mb-2 Details
+  dl#meta.text-sm.text-gray-300(class="grid grid-cols-1 md:grid-cols-2 gap-y-1 gap-x-6")
+    div Loading…
+
+  script.
+    (async () => {
+      const r = await fetch(location.pathname.replace(/\/play$/, '/info'));
+      const dl = document.getElementById('meta');
+      if (!r.ok) { dl.innerHTML = '<div class="text-red-400">probe failed</div>'; return; }
+      const j = await r.json();
+      if (j.error) { dl.innerHTML = '<div class="text-red-400">' + j.error + '</div>'; return; }
+      const fmtDur = (s) => {
+        if (s == null) return '?';
+        s = Math.round(s);
+        const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+        return (h ? h+'h ' : '') + String(m).padStart(2,'0') + 'm ' + String(x).padStart(2,'0') + 's';
+      };
+      const fmtBytes = (b) => {
+        if (!b && b !== 0) return '?';
+        const u = ['B','KB','MB','GB','TB']; let i=0, n=b;
+        while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+        return n.toFixed(n>=100?0:1) + ' ' + u[i];
+      };
+      const row = (k, v) => `<div><span class="text-gray-500">${k}:</span> <span class="font-mono">${v}</span></div>`;
+      const v = j.video || {}, a = j.audio;
+      dl.innerHTML = [
+        row('Duration', fmtDur(j.duration)),
+        row('Size', fmtBytes(j.size)),
+        row('Bitrate', j.bitrate ? (Math.round(j.bitrate/1000) + ' kbps') : '?'),
+        row('Resolution', v.width && v.height ? (v.width + '×' + v.height) : '?'),
+        row('Video codec', [v.codec, v.profile].filter(Boolean).join(' / ') || '?'),
+        row('FPS', v.fps ?? '?'),
+        row('Pixel format', v.pix_fmt || '?'),
+        row('Audio', a ? (a.codec + ' ' + a.channels + 'ch ' + (a.sample_rate/1000) + 'kHz') : 'none'),
+      ].join('');
+    })();

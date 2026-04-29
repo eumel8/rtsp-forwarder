@@ -1,0 +1,31 @@
+# Recordings Web UI image
+# - Node 20 alpine for the express app
+# - ffmpeg/ffprobe for metadata + thumbnails
+
+FROM node:20-alpine
+
+RUN apk add --no-cache ffmpeg tini \
+    && addgroup -g 10001 -S app \
+    && adduser -u 10001 -S -G app app
+
+WORKDIR /app
+
+COPY web/package.json ./
+RUN npm install --omit=dev && npm cache clean --force
+
+COPY web/server.js ./
+COPY web/views ./views
+
+RUN mkdir -p /tmp/thumbs && chown -R app:app /tmp/thumbs /app
+
+USER 10001
+
+EXPOSE 3000
+
+ENV NODE_ENV=production \
+    RECORDINGS_DIR=/recordings \
+    THUMB_DIR=/tmp/thumbs \
+    PORT=3000
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "server.js"]

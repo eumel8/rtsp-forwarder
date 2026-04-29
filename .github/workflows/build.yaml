@@ -25,6 +25,8 @@ jobs:
             dockerfile: Dockerfile
           - image: rtsp-recorder
             dockerfile: Dockerfile.recorder
+          - image: recordings-web
+            dockerfile: Dockerfile.web
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chart: [rtsp-forwarder, rtsp-recorder]
+        chart: [rtsp-forwarder, rtsp-recorder, recordings-web]
     steps:
       - uses: actions/checkout@v4
 

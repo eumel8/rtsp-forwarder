@@ -1,0 +1,14 @@
+title: "CCTV Recordings"
+allowDelete: true
+
+cameras:
+  - name: cam01
+    existingClaim: rec-rtsp-recorder-cam01
+  - name: cam02
+    existingClaim: rec-rtsp-recorder-cam02
+
+ingress:
+  enabled: false
+
+basicAuth:
+  enabled: false

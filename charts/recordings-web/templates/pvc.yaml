@@ -1,0 +1,15 @@
+{{- if .Values.thumbnailCache.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "recordings-web.fullname" . }}-thumbs
+  labels:
+    {{- include "recordings-web.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.thumbnailCache.accessMode | quote }}
+  storageClassName: {{ .Values.thumbnailCache.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.thumbnailCache.size | quote }}
+{{- end }}
