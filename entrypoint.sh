@@ -11,11 +11,14 @@
 #
 # Optional:
 #   MODE           "copy" (Default) oder "transcode"
+#                  copy = -c:v copy, Audio per AUDIO_MODE (Default: smart)
+#   AUDIO_MODE     "smart" (Default), "copy", "aac", "drop"
+#                  smart probt die Quelle und macht copy bei AAC, sonst aac.
+#                  RTMP/FLV unterstuetzt nur AAC/MP3/Speex - PCM/G.711 muss
+#                  zwingend transkodiert werden.
 #   INPUT_TYPE     "auto" (Default), "rtsp", "http-mjpeg", "rtmp"
 #   INPUT_FPS      Framerate fuer MJPEG (Default 15)
-#   RW_TIMEOUT     HTTP read/write timeout in us (Default 5000000 = 5s).
-#                  ffmpeg killt sich wenn so lang keine Bytes kommen
-#                  -> Restart-Loop holt einen frischen Stream
+#   RW_TIMEOUT     HTTP read/write timeout in us (Default 5000000 = 5s)
 #   VIDEO_CODEC    Default: libx264 (nur bei MODE=transcode)
 #   AUDIO_CODEC    Default: aac     (nur bei MODE=transcode)
 #   VIDEO_BITRATE  Default: 2000k
@@ -31,6 +34,7 @@ set -euo pipefail
 : "${RTMP_URL:?RTMP_URL ist erforderlich}"
 
 MODE="${MODE:-copy}"
+AUDIO_MODE="${AUDIO_MODE:-smart}"
 INPUT_TYPE="${INPUT_TYPE:-auto}"
 INPUT_FPS="${INPUT_FPS:-15}"
 LOGLEVEL="${LOGLEVEL:-warning}"
@@ -49,11 +53,10 @@ if [[ "$INPUT_TYPE" == "auto" ]]; then
     rtsp://*)             INPUT_TYPE="rtsp" ;;
     rtmp://*|rtmps://*)   INPUT_TYPE="rtmp" ;;
     http://*|https://*)
-      # MJPEG-Hinweise im URL-Pfad
       if echo "$RTSP_URL" | grep -qiE '(videostream\.cgi|mjpg|mjpeg|/video$|\.cgi)'; then
         INPUT_TYPE="http-mjpeg"
       else
-        INPUT_TYPE="http-mjpeg"   # Foscam-style ist Default fuer http
+        INPUT_TYPE="http-mjpeg"
       fi
       ;;
     *) echo "[forwarder] unbekanntes URL-Schema: $RTSP_URL" >&2; exit 2 ;;
@@ -61,7 +64,57 @@ if [[ "$INPUT_TYPE" == "auto" ]]; then
 fi
 
 SAFE_URL="$(echo "$RTSP_URL" | sed -E 's#(://)[^@/]+@#\1***@#; s#(pwd|password)=[^&]*#\1=***#g')"
-echo "[forwarder] Type=$INPUT_TYPE Mode=$MODE Source=$SAFE_URL Target=$RTMP_URL"
+echo "[forwarder] Type=$INPUT_TYPE Mode=$MODE AudioMode=$AUDIO_MODE Source=$SAFE_URL Target=$RTMP_URL"
+
+# Probe Audio-Codec der Quelle (nur RTSP/RTMP, MJPEG hat per Definition kein Audio).
+# Setzt SOURCE_AUDIO_CODEC auf "none" wenn keiner gefunden, sonst Codec-Name (z.B. aac, pcm_alaw, opus).
+probe_audio_codec() {
+  local codec=""
+  local probe_opts=( -hide_banner -v error -select_streams a:0 -show_entries stream=codec_name -of default=nw=1:nk=1 )
+  case "$INPUT_TYPE" in
+    rtsp)
+      codec=$(timeout 10 ffprobe -rtsp_transport tcp "${probe_opts[@]}" "$RTSP_URL" 2>/dev/null | head -n1 || true)
+      ;;
+    rtmp)
+      codec=$(timeout 10 ffprobe "${probe_opts[@]}" "$RTSP_URL" 2>/dev/null | head -n1 || true)
+      ;;
+    *)
+      codec=""
+      ;;
+  esac
+  if [[ -z "$codec" ]]; then
+    echo "none"
+  else
+    echo "$codec"
+  fi
+}
+
+resolve_audio_mode() {
+  local requested="$1"
+  if [[ "$INPUT_TYPE" == "http-mjpeg" ]]; then
+    echo "drop"
+    return
+  fi
+  if [[ "$requested" != "smart" ]]; then
+    echo "$requested"
+    return
+  fi
+  local detected
+  detected=$(probe_audio_codec)
+  case "$detected" in
+    none)
+      echo "[forwarder] audio probe: keine Audio-Spur erkannt -> drop" >&2
+      echo "drop" ;;
+    aac)
+      echo "[forwarder] audio probe: aac -> copy" >&2
+      echo "copy" ;;
+    *)
+      echo "[forwarder] audio probe: $detected nicht RTMP-kompatibel -> aac transcode" >&2
+      echo "aac" ;;
+  esac
+}
+
+EFFECTIVE_AUDIO_MODE=$(resolve_audio_mode "$AUDIO_MODE")
 
 # Input-Optionen je nach Quelle
 case "$INPUT_TYPE" in
@@ -81,7 +134,6 @@ case "$INPUT_TYPE" in
     )
     ;;
   http-mjpeg)
-    # MJPEG ueber HTTP: kein Audio, Framerate erzwingen, robust gegen Aussetzer
     INPUT_OPTS=(
       -hide_banner -loglevel "$LOGLEVEL"
       -f mjpeg
@@ -97,7 +149,6 @@ case "$INPUT_TYPE" in
       -flags low_delay
       -use_wallclock_as_timestamps 1
     )
-    # MJPEG kann nicht copy nach FLV - immer transcoden
     if [[ "$MODE" == "copy" ]]; then
       echo "[forwarder] HTTP/MJPEG erfordert MODE=transcode, schalte um"
       MODE="transcode"
@@ -107,13 +158,25 @@ case "$INPUT_TYPE" in
     echo "[forwarder] Unbekannter INPUT_TYPE='$INPUT_TYPE'" >&2; exit 2 ;;
 esac
 
+audio_output_args() {
+  case "$EFFECTIVE_AUDIO_MODE" in
+    drop)
+      echo "-an" ;;
+    copy)
+      echo "-c:a copy -bsf:a aac_adtstoasc" ;;
+    aac)
+      echo "-c:a aac -b:a $AUDIO_BITRATE -ar 44100 -ac 1" ;;
+    *)
+      echo "[forwarder] unbekannter AUDIO_MODE='$EFFECTIVE_AUDIO_MODE'" >&2
+      echo "-an" ;;
+  esac
+}
+
 # Output-Optionen je Mode
 if [[ "$MODE" == "copy" ]]; then
-  OUTPUT_OPTS=(
-    -c copy
-    -bsf:a aac_adtstoasc
-    -f flv
-  )
+  OUTPUT_OPTS=( -c:v copy -f flv )
+  # shellcheck disable=SC2207
+  OUTPUT_OPTS+=( $(audio_output_args) )
 elif [[ "$MODE" == "transcode" ]]; then
   OUTPUT_OPTS=(
     -c:v "$VIDEO_CODEC"
@@ -126,15 +189,13 @@ elif [[ "$MODE" == "transcode" ]]; then
     -pix_fmt yuv420p
     -f flv
   )
-  # Audio nur wenn die Quelle welches liefert
-  if [[ "$INPUT_TYPE" == "http-mjpeg" ]]; then
-    OUTPUT_OPTS+=( -an )
-  else
-    OUTPUT_OPTS+=( -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" -ar 44100 )
-  fi
+  # shellcheck disable=SC2207
+  OUTPUT_OPTS+=( $(audio_output_args) )
 else
   echo "[forwarder] Unbekannter MODE='$MODE'" >&2; exit 2
 fi
+
+echo "[forwarder] Output: mode=$MODE audio=$EFFECTIVE_AUDIO_MODE"
 
 # Auto-Restart-Loop
 backoff=2

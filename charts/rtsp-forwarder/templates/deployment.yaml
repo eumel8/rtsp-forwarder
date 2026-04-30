@@ -41,6 +41,8 @@ spec:
           env:
             - name: MODE
               value: {{ $mode | quote }}
+            - name: AUDIO_MODE
+              value: {{ default $.Values.defaults.audioMode $cam.audioMode | quote }}
             - name: LOGLEVEL
               value: {{ default $.Values.defaults.loglevel $cam.loglevel | quote }}
             - name: VIDEO_BITRATE
