@@ -124,6 +124,7 @@ case "$INPUT_TYPE" in
       -rtsp_transport tcp
       -timeout 10000000
       -fflags +genpts+discardcorrupt
+      -err_detect ignore_err
       -use_wallclock_as_timestamps 1
       -avoid_negative_ts make_zero
     )
