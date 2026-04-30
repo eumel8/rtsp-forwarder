@@ -221,20 +221,31 @@ while true; do
   runtime=$((end - start))
   echo "[forwarder] ffmpeg beendet rc=$rc nach ${runtime}s, Restart in ${backoff}s..."
 
-  # Auto-Fallback: copy-Mode kann nicht mit fehlenden PTS umgehen. Wenn die
-  # Quelle wiederholt schnell stirbt, schalten wir auf transcode um. Das
-  # generiert garantiert PTS und ueberlebt auch komische RTSP-Profile.
-  if (( runtime <= 30 )) && [[ "$MODE" == "copy" ]]; then
-    short_fails=$((short_fails + 1))
-    if (( short_fails >= 3 )); then
-      echo "[forwarder] copy-Mode 3x kurz hintereinander gescheitert -> Fallback auf MODE=transcode"
+  # Auto-Fallback: copy-Mode kann nicht mit fehlenden PTS umgehen.
+  # rc=234 ist ffmpegs "Invalid argument" beim Muxer (klassisch fuer
+  # "Packet is missing PTS" / FLV ohne timestamps). Hier sofort umschalten,
+  # unabhaengig von der Laufzeit -- der Fehler ist deterministisch.
+  # Zusaetzlich: drei kurze Faehler in Folge (<= 30s Laufzeit) als
+  # Heuristik fuer andere copy-spezifische Probleme.
+  if [[ "$MODE" == "copy" ]]; then
+    if (( rc == 234 )); then
+      echo "[forwarder] ffmpeg rc=234 in copy-mode (vermutlich fehlende PTS) -> Fallback auf MODE=transcode"
       MODE=transcode
       build_output_opts
       echo "[forwarder] Output (fallback): mode=$MODE audio=$EFFECTIVE_AUDIO_MODE"
       short_fails=0
+    elif (( runtime <= 30 )); then
+      short_fails=$((short_fails + 1))
+      if (( short_fails >= 3 )); then
+        echo "[forwarder] copy-Mode 3x kurz hintereinander gescheitert -> Fallback auf MODE=transcode"
+        MODE=transcode
+        build_output_opts
+        echo "[forwarder] Output (fallback): mode=$MODE audio=$EFFECTIVE_AUDIO_MODE"
+        short_fails=0
+      fi
+    else
+      short_fails=0
     fi
-  else
-    short_fails=0
   fi
 
   if (( runtime > 30 )); then backoff=2
