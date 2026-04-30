@@ -8,11 +8,12 @@ Two complementary components for IP-camera streaming on Kubernetes:
 |------------------|------------------------------------------|----------------------------------------------------------|
 | `rtsp-forwarder` | `ghcr.io/eumel8/rtsp-forwarder`          | `oci://ghcr.io/eumel8/charts/rtsp-forwarder`             |
 | `rtsp-recorder`  | `ghcr.io/eumel8/rtsp-recorder`           | `oci://ghcr.io/eumel8/charts/rtsp-recorder`              |
+| `recordings-web` | `ghcr.io/eumel8/recordings-web`          | `oci://ghcr.io/eumel8/charts/recordings-web`             |
 
 ```
 [ IP camera ] --RTSP--> [ rtsp-forwarder ] --RTMP--> [ nginx-rtmp ] --RTMP--> [ rtsp-recorder ] --MP4 segments--> PVC
-                                                            |
-                                                            +--RTMP/HLS--> live viewers
+                                                            |                                                       |
+                                                            +--RTMP/HLS--> live viewers      [ recordings-web ] <---+
 ```
 
 ## rtsp-forwarder
@@ -138,3 +139,40 @@ default 1h segments, segment boundaries aligned to wall clock.
 A background loop deletes files older than `retentionDays` every 6h.
 
 See `charts/rtsp-recorder/README.md` and `charts/rtsp-recorder/values.yaml` for the full reference.
+
+## recordings-web
+
+Web UI to browse, play and delete the MP4 segments produced by `rtsp-recorder`.
+Node.js + Express, native HTML5 player with HTTP Range requests (seekable),
+ffmpeg thumbnails, ffprobe metadata. Mounts the recorder PVCs read/write
+(or read-only with `allowDelete: false`).
+
+```bash
+helm install rec-web oci://ghcr.io/eumel8/charts/recordings-web \
+  -n media -f recordings-web-values.yaml
+```
+
+Minimal `recordings-web-values.yaml`:
+
+```yaml
+title: "CCTV Recordings"
+allowDelete: true
+
+cameras:
+  - name: cam01
+    existingClaim: rec-rtsp-recorder-cam01
+  - name: cam02
+    existingClaim: rec-rtsp-recorder-cam02
+```
+
+Optional ingress with basic-auth — generate the htpasswd entry without
+installing apache2-utils, using just `openssl`:
+
+```bash
+# user=admin, password=somesecret  (APR1 / MD5, supported by nginx-ingress)
+printf "admin:$(openssl passwd -apr1 'somesecret')\n"
+```
+
+Drop the resulting line into `basicAuth.htpasswd` in your values file and
+enable `ingress`. See `charts/recordings-web/README.md` for the full reference,
+ingress annotations and the persistent thumbnail cache option.

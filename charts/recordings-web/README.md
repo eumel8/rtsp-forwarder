@@ -49,7 +49,10 @@ ingress:
 
 basicAuth:
   enabled: true
-  # produced by: htpasswd -nb admin 'somesecret'
+  # produced by either:
+  #   htpasswd -nb admin 'somesecret'
+  # or, without apache2-utils:
+  #   printf "admin:$(openssl passwd -apr1 'somesecret')\n"
   htpasswd: "admin:$apr1$..."
 ```
 
