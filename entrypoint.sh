@@ -125,6 +125,7 @@ case "$INPUT_TYPE" in
       -timeout 10000000
       -fflags +genpts+discardcorrupt
       -use_wallclock_as_timestamps 1
+      -avoid_negative_ts make_zero
     )
     ;;
   rtmp)
@@ -173,32 +174,39 @@ audio_output_args() {
 }
 
 # Output-Optionen je Mode
-if [[ "$MODE" == "copy" ]]; then
-  OUTPUT_OPTS=( -c:v copy -f flv )
+build_output_opts() {
+  if [[ "$MODE" == "copy" ]]; then
+    OUTPUT_OPTS=(
+      -c:v copy
+      -flvflags no_duration_filesize
+      -f flv
+    )
+  elif [[ "$MODE" == "transcode" ]]; then
+    OUTPUT_OPTS=(
+      -c:v "$VIDEO_CODEC"
+      -preset "$PRESET"
+      -tune zerolatency
+      -b:v "$VIDEO_BITRATE"
+      -maxrate "$VIDEO_BITRATE"
+      -bufsize "$VIDEO_BITRATE"
+      -g "$GOP"
+      -pix_fmt yuv420p
+      -flvflags no_duration_filesize
+      -f flv
+    )
+  else
+    echo "[forwarder] Unbekannter MODE='$MODE'" >&2; exit 2
+  fi
   # shellcheck disable=SC2207
   OUTPUT_OPTS+=( $(audio_output_args) )
-elif [[ "$MODE" == "transcode" ]]; then
-  OUTPUT_OPTS=(
-    -c:v "$VIDEO_CODEC"
-    -preset "$PRESET"
-    -tune zerolatency
-    -b:v "$VIDEO_BITRATE"
-    -maxrate "$VIDEO_BITRATE"
-    -bufsize "$VIDEO_BITRATE"
-    -g "$GOP"
-    -pix_fmt yuv420p
-    -f flv
-  )
-  # shellcheck disable=SC2207
-  OUTPUT_OPTS+=( $(audio_output_args) )
-else
-  echo "[forwarder] Unbekannter MODE='$MODE'" >&2; exit 2
-fi
+}
+build_output_opts
 
 echo "[forwarder] Output: mode=$MODE audio=$EFFECTIVE_AUDIO_MODE"
 
 # Auto-Restart-Loop
 backoff=2
+short_fails=0
 while true; do
   start=$(date +%s)
   set +e
@@ -212,6 +220,23 @@ while true; do
   end=$(date +%s)
   runtime=$((end - start))
   echo "[forwarder] ffmpeg beendet rc=$rc nach ${runtime}s, Restart in ${backoff}s..."
+
+  # Auto-Fallback: copy-Mode kann nicht mit fehlenden PTS umgehen. Wenn die
+  # Quelle wiederholt schnell stirbt, schalten wir auf transcode um. Das
+  # generiert garantiert PTS und ueberlebt auch komische RTSP-Profile.
+  if (( runtime <= 30 )) && [[ "$MODE" == "copy" ]]; then
+    short_fails=$((short_fails + 1))
+    if (( short_fails >= 3 )); then
+      echo "[forwarder] copy-Mode 3x kurz hintereinander gescheitert -> Fallback auf MODE=transcode"
+      MODE=transcode
+      build_output_opts
+      echo "[forwarder] Output (fallback): mode=$MODE audio=$EFFECTIVE_AUDIO_MODE"
+      short_fails=0
+    fi
+  else
+    short_fails=0
+  fi
+
   if (( runtime > 30 )); then backoff=2
   else backoff=$(( backoff * 2 )); (( backoff > 30 )) && backoff=30; fi
   sleep "$backoff"
