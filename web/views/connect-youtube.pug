@@ -1,0 +1,129 @@
+extends layout
+
+block content
+  .max-w-lg.mx-auto
+    .flex.items-center.justify-between.mb-6
+      div
+        h1.text-3xl.font-bold YouTube verbinden
+        p.text-sm.text-gray-400 Aufnahme direkt auf deinen YouTube-Kanal hochladen
+      a.text-sm.text-gray-400(class="hover:text-gray-200" href="/") &larr; back
+
+    .rounded-lg.bg-gray-800.p-6
+      if connected
+        //- Verbunden
+        .flex.items-center.gap-3.mb-4
+          .w-3.h-3.rounded-full.bg-green-500
+          span.text-green-400.font-medium Verbunden
+        if channelName
+          p.text-gray-300.mb-1 Kanal:
+            span.font-bold.text-white= ' ' + channelName
+        p.text-sm.text-gray-400.mb-6 Uploads werden auf diesen Kanal hochgeladen.
+
+        //- Trennen
+        button#disconnect-btn.w-full.py-2.rounded.bg-gray-600.text-sm.font-medium(class="hover:bg-gray-500") YouTube trennen
+        #disconnect-status.text-sm.text-red-400.mt-2.hidden
+      else
+        //- Nicht verbunden
+        .flex.items-center.gap-3.mb-4
+          .w-3.h-3.rounded-full.bg-yellow-500
+          span.text-yellow-400.font-medium Nicht verbunden
+        p.text-sm.text-gray-400.mb-6 Verbinde deinen Google-Account, um Videos direkt auf YouTube hochzuladen. Im Popup wählst du den gewünschten Account und Kanal aus.
+
+        //- Connect Button
+        #connect-btn-wrapper
+          button#connect-btn.w-full.py-3.rounded.bg-red-600.text-sm.font-bold(class="hover:bg-red-500") Mit YouTube verbinden
+        #connect-status.text-sm.mt-3.hidden
+
+    //- Erklärung
+    .mt-6.text-xs.text-gray-500
+      p.mb-1 Die Verbindung wird über Google OAuth hergestellt. Es werden nur Berechtigungen für YouTube-Uploads angefordert.
+      p Der Token wird Server-seitig gespeichert. Bei Pod-Neustart muss die Verbindung erneut hergestellt werden.
+
+  //- Google Identity Services
+  script(src="https://accounts.google.com/gsi/client" async defer)
+  script.
+    (() => {
+      const clientId = '#{ytClientId}';
+      const connectBtn = document.getElementById('connect-btn');
+      const connectStatus = document.getElementById('connect-status');
+      const disconnectBtn = document.getElementById('disconnect-btn');
+      const disconnectStatus = document.getElementById('disconnect-status');
+
+      function showStatus(el, msg, isError) {
+        el.textContent = msg;
+        el.className = 'text-sm mt-3 ' + (isError ? 'text-red-400' : 'text-green-400');
+        el.classList.remove('hidden');
+      }
+
+      // GIS Authorization Code flow (popup)
+      function initGis() {
+        if (!window.google?.accounts?.oauth2) {
+          // GIS script not loaded yet, retry
+          setTimeout(initGis, 200);
+          return;
+        }
+        const client = google.accounts.oauth2.initCodeClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/youtube.upload',
+          ux_mode: 'popup',
+          callback: async (response) => {
+            if (response.error) {
+              showStatus(connectStatus, 'Fehler: ' + response.error, true);
+              connectBtn.disabled = false;
+              connectBtn.textContent = 'Mit YouTube verbinden';
+              return;
+            }
+            try {
+              const r = await fetch('/api/youtube/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: response.code }),
+              });
+              const data = await r.json();
+              if (!r.ok) {
+                showStatus(connectStatus, 'Fehler: ' + (data.error || r.status), true);
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Mit YouTube verbinden';
+                return;
+              }
+              showStatus(connectStatus, 'Verbunden mit ' + (data.channelName || 'YouTube') + '!', false);
+              setTimeout(() => location.reload(), 1200);
+            } catch (e) {
+              showStatus(connectStatus, 'Netzwerk-Fehler: ' + e.message, true);
+              connectBtn.disabled = false;
+              connectBtn.textContent = 'Mit YouTube verbinden';
+            }
+          },
+        });
+        connectBtn.addEventListener('click', () => {
+          connectBtn.disabled = true;
+          connectBtn.textContent = 'Öffne Google-Anmeldung...';
+          connectStatus.classList.add('hidden');
+          client.requestCode();
+        });
+      }
+      if (connectBtn) initGis();
+
+      // Disconnect
+      if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', async () => {
+          disconnectBtn.disabled = true;
+          disconnectBtn.textContent = 'Trennen...';
+          try {
+            const r = await fetch('/api/youtube/disconnect', { method: 'POST' });
+            if (r.ok) {
+              showStatus(disconnectStatus, 'Getrennt.', false);
+              setTimeout(() => location.reload(), 800);
+            } else {
+              showStatus(disconnectStatus, 'Fehler beim Trennen.', true);
+              disconnectBtn.disabled = false;
+              disconnectBtn.textContent = 'YouTube trennen';
+            }
+          } catch (e) {
+            showStatus(disconnectStatus, 'Netzwerk-Fehler: ' + e.message, true);
+            disconnectBtn.disabled = false;
+            disconnectBtn.textContent = 'YouTube trennen';
+          }
+        });
+      }
+    })();

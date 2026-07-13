@@ -49,6 +49,14 @@ spec:
               value: "/var/cache/thumbs"
             - name: CAMERAS
               value: {{ range $i, $c := .Values.cameras }}{{ if $i }},{{ end }}{{ $c.name }}{{ end }}
+            {{- if .Values.youtube.enabled }}
+            - name: YOUTUBE_CLIENT_ID
+              value: {{ .Values.youtube.clientId | quote }}
+            - name: YOUTUBE_CLIENT_SECRET
+              value: {{ .Values.youtube.clientSecret | quote }}
+            - name: YOUTUBE_DATA_DIR
+              value: "/data"
+            {{- end }}
           volumeMounts:
             {{- range $cam := .Values.cameras }}
             - name: rec-{{ $cam.name }}
@@ -59,6 +67,10 @@ spec:
               mountPath: /var/cache/thumbs
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.youtube.enabled }}
+            - name: yt-data
+              mountPath: /data
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -95,6 +107,11 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        {{- if .Values.youtube.enabled }}
+        - name: yt-data
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

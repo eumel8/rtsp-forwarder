@@ -1,6 +1,6 @@
 // Recordings Web UI
 // Serves a directory of MP4 segments per camera with HTML5 player,
-// metadata via ffprobe, thumbnails, and delete.
+// metadata via ffprobe, thumbnails, delete, and YouTube upload.
 //
 // Env:
 //   RECORDINGS_DIR   default /recordings
@@ -9,12 +9,17 @@
 //   ALLOW_DELETE     "true" (default) | "false"
 //   THUMB_DIR        default /tmp/thumbs
 //   TITLE            default "Recordings"
+//   YOUTUBE_CLIENT_ID       OAuth2 client ID (GIS popup flow)
+//   YOUTUBE_CLIENT_SECRET   OAuth2 client secret
+//   YOUTUBE_DATA_DIR        writable dir for token storage (default /data)
 
 import express from 'express';
 import { promises as fs, createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { google } from 'googleapis';
+import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +29,16 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const ALLOW_DELETE = (process.env.ALLOW_DELETE || 'true').toLowerCase() === 'true';
 const THUMB_DIR = process.env.THUMB_DIR || '/tmp/thumbs';
 const TITLE = process.env.TITLE || 'Recordings';
+
+// YouTube OAuth2 configuration (GIS popup flow)
+const YT_CLIENT_ID = process.env.YOUTUBE_CLIENT_ID || '';
+const YT_CLIENT_SECRET = process.env.YOUTUBE_CLIENT_SECRET || '';
+const YT_DATA_DIR = process.env.YOUTUBE_DATA_DIR || '/data';
+const YT_DATA_FILE = path.join(YT_DATA_DIR, 'youtube.json');
+const YT_CONFIGURED = Boolean(YT_CLIENT_ID && YT_CLIENT_SECRET);
+
+// In-memory upload jobs: { id, state, progress, videoId, videoUrl, error }
+const uploadJobs = new Map();
 
 await fs.mkdir(THUMB_DIR, { recursive: true });
 
@@ -214,6 +229,97 @@ app.locals.fmtSize = fmtSize;
 app.locals.fmtDuration = fmtDuration;
 app.locals.title = TITLE;
 app.locals.allowDelete = ALLOW_DELETE;
+app.locals.ytClientId = YT_CLIENT_ID;
+app.locals.ytConfigured = YT_CONFIGURED;
+
+// Dynamic: check YouTube connection status on each request
+app.use(async (_req, res, next) => {
+  res.locals.ytConnected = YT_CONFIGURED ? await isYtConnected() : false;
+  next();
+});
+
+// ---------- YouTube helpers ----------
+
+async function readYtToken() {
+  try {
+    const raw = await fs.readFile(YT_DATA_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function writeYtToken(data) {
+  await fs.mkdir(YT_DATA_DIR, { recursive: true });
+  await fs.writeFile(YT_DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+async function deleteYtToken() {
+  try { await fs.unlink(YT_DATA_FILE); } catch { /* ignore */ }
+}
+
+async function isYtConnected() {
+  const token = await readYtToken();
+  return Boolean(token?.refresh_token);
+}
+
+function getOAuth2Client() {
+  return new google.auth.OAuth2(YT_CLIENT_ID, YT_CLIENT_SECRET);
+}
+
+async function getYouTubeClient() {
+  const token = await readYtToken();
+  if (!token?.refresh_token) throw new Error('YouTube not connected');
+  const oauth2 = getOAuth2Client();
+  oauth2.setCredentials({ refresh_token: token.refresh_token });
+  return google.youtube({ version: 'v3', auth: oauth2 });
+}
+
+function startYouTubeUpload(filePath, metadata) {
+  const id = crypto.randomUUID();
+  const job = { id, state: 'starting', progress: 0, videoId: null, videoUrl: null, error: null };
+  uploadJobs.set(id, job);
+
+  (async () => {
+    try {
+      const youtube = await getYouTubeClient();
+      const fileSize = (await fs.stat(filePath)).size;
+
+      const res = await youtube.videos.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: {
+            title: metadata.title || path.basename(filePath),
+            description: metadata.description || '',
+          },
+          status: {
+            privacyStatus: metadata.privacy || 'private',
+            selfDeclaredMadeForKids: false,
+          },
+        },
+        media: {
+          body: createReadStream(filePath),
+        },
+      }, {
+        onUploadProgress: (evt) => {
+          job.progress = Math.round((evt.bytesRead / fileSize) * 100);
+          job.state = 'uploading';
+        },
+      });
+
+      job.state = 'done';
+      job.progress = 100;
+      job.videoId = res.data.id;
+      job.videoUrl = `https://www.youtube.com/watch?v=${res.data.id}`;
+    } catch (e) {
+      job.state = 'error';
+      job.error = e.message || String(e);
+      console.error('YouTube upload failed:', job.error);
+    }
+  })();
+
+  return id;
+}
 
 // ---------- routes ----------
 
@@ -333,6 +439,94 @@ app.delete('/cam/:cam/:file', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------- YouTube OAuth (GIS popup flow) ----------
+
+app.get('/connect/youtube', async (_req, res) => {
+  if (!YT_CLIENT_ID || !YT_CLIENT_SECRET) {
+    return res.status(500).send('YouTube not configured: missing YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET');
+  }
+  const connected = await isYtConnected();
+  let channelName = null;
+  if (connected) {
+    try {
+      const youtube = await getYouTubeClient();
+      const r = await youtube.channels.list({ part: ['snippet'], mine: true });
+      channelName = r.data.items?.[0]?.snippet?.title || null;
+    } catch { /* ignore */ }
+  }
+  res.render('connect-youtube', { connected, channelName });
+});
+
+app.post('/api/youtube/connect', async (req, res) => {
+  if (!YT_CLIENT_ID || !YT_CLIENT_SECRET) {
+    return res.status(400).json({ error: 'YouTube not configured' });
+  }
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Missing code' });
+  try {
+    const oauth2 = getOAuth2Client();
+    const { tokens } = await oauth2.getToken(code);
+    if (!tokens.refresh_token) {
+      return res.status(400).json({ error: 'No refresh token received. Try again with a different Google account or revoke access first at myaccount.google.com/permissions.' });
+    }
+    // Fetch channel name
+    let channelName = null;
+    try {
+      oauth2.setCredentials({ access_token: tokens.access_token });
+      const youtube = google.youtube({ version: 'v3', auth: oauth2 });
+      const r = await youtube.channels.list({ part: ['snippet'], mine: true });
+      channelName = r.data.items?.[0]?.snippet?.title || null;
+    } catch { /* ignore */ }
+    await writeYtToken({ refresh_token: tokens.refresh_token, channel_name: channelName });
+    res.json({ ok: true, channelName });
+  } catch (e) {
+    res.status(500).json({ error: 'Token exchange failed: ' + e.message });
+  }
+});
+
+app.post('/api/youtube/disconnect', async (_req, res) => {
+  await deleteYtToken();
+  res.json({ ok: true });
+});
+
+// ---------- YouTube API ----------
+
+app.get('/api/youtube/status', async (_req, res) => {
+  const connected = await isYtConnected();
+  let channelName = null;
+  if (connected) {
+    try {
+      const youtube = await getYouTubeClient();
+      const r = await youtube.channels.list({ part: ['snippet'], mine: true });
+      channelName = r.data.items?.[0]?.snippet?.title || null;
+    } catch { /* ignore */ }
+  }
+  res.json({ configured: YT_CONFIGURED, connected, channelName });
+});
+
+app.post('/api/youtube/upload', express.json(), async (req, res) => {
+  if (!YT_CONFIGURED) return res.status(400).json({ error: 'YouTube not configured (missing client ID/secret)' });
+  if (!(await isYtConnected())) return res.status(400).json({ error: 'YouTube not connected. Visit /connect/youtube to connect.' });
+  const { cam, file, title, description, privacy } = req.body || {};
+  if (!cam || !file) return res.status(400).json({ error: 'cam and file required' });
+  if (!safeCam(cam) || !safeFile(file)) return res.status(400).json({ error: 'bad name' });
+  const full = await resolveFile(cam, file);
+  if (!full) return res.status(404).json({ error: 'recording not found' });
+
+  const uploadId = startYouTubeUpload(full, {
+    title: title || file.replace('.mp4', ''),
+    description: description || '',
+    privacy: privacy || 'private',
+  });
+  res.json({ uploadId });
+});
+
+app.get('/api/youtube/upload/:id', (req, res) => {
+  const job = uploadJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'upload not found' });
+  res.json(job);
 });
 
 app.listen(PORT, () => {

@@ -82,3 +82,12 @@ securityContext:
   capabilities:
     drop: ["ALL"]
   readOnlyRootFilesystem: true
+
+# YouTube upload support (optional). When enabled, an "Upload to YouTube"
+# button appears on each recording in the UI.
+# Users connect their Google account via the browser (GIS popup flow).
+# The refresh token is stored server-side in /data/youtube.json (emptyDir).
+youtube:
+  enabled: false
+  clientId: ""
+  clientSecret: ""
