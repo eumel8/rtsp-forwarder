@@ -77,7 +77,7 @@ block content
               const r = await fetch('/api/youtube/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: response.code, origin: location.origin }),
+                body: JSON.stringify({ code: response.code }),
               });
               const data = await r.json();
               if (!r.ok) {
