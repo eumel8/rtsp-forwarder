@@ -463,11 +463,12 @@ app.post('/api/youtube/connect', async (req, res) => {
   if (!YT_CLIENT_ID || !YT_CLIENT_SECRET) {
     return res.status(400).json({ error: 'YouTube not configured' });
   }
-  const { code } = req.body || {};
+  const { code, origin } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Missing code' });
   try {
+    const redirectUri = origin || 'https://cam.t.mcsps.de';
     const oauth2 = getOAuth2Client();
-    const { tokens } = await oauth2.getToken(code);
+    const { tokens } = await oauth2.getToken(code, { redirect_uri: redirectUri });
     if (!tokens.refresh_token) {
       return res.status(400).json({ error: 'No refresh token received. Try again with a different Google account or revoke access first at myaccount.google.com/permissions.' });
     }
