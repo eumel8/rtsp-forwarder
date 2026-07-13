@@ -67,6 +67,26 @@ spec:
               mountPath: /var/cache/thumbs
             - name: tmp
               mountPath: /tmp
+            - name: patch-files
+              mountPath: /app/server.js
+              subPath: server.js
+              readOnly: true
+            - name: patch-files
+              mountPath: /app/views/layout.pug
+              subPath: layout.pug
+              readOnly: true
+            - name: patch-files
+              mountPath: /app/views/camera.pug
+              subPath: camera.pug
+              readOnly: true
+            - name: patch-files
+              mountPath: /app/views/play.pug
+              subPath: play.pug
+              readOnly: true
+            - name: patch-files
+              mountPath: /app/views/connect-youtube.pug
+              subPath: connect-youtube.pug
+              readOnly: true
             {{- if .Values.youtube.enabled }}
             - name: yt-data
               mountPath: /data
@@ -107,6 +127,9 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        - name: patch-files
+          configMap:
+            name: {{ include "recordings-web.fullname" . }}-patch
         {{- if .Values.youtube.enabled }}
         - name: yt-data
           emptyDir:

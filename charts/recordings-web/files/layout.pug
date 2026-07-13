@@ -1,0 +1,22 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1")
+    title= title
+    script(src="https://unpkg.com/@tailwindcss/browser@4")
+  body.bg-gray-900.text-gray-100.min-h-screen
+    nav.bg-gray-950.border-b.border-gray-800
+      .max-w-6xl.mx-auto.px-4.py-3.flex.items-center.justify-between
+        a.font-bold.text-lg(href="/")= title
+        .flex.items-center.gap-4
+          if ytConfigured
+            a.text-sm.flex.items-center.gap-1(href="/connect/youtube" class="hover:text-gray-200")
+              if ytConnected
+                span.w-2.h-2.rounded-full.bg-green-500.inline-block
+                span.text-green-400 YouTube
+              else
+                span.w-2.h-2.rounded-full.bg-yellow-500.inline-block
+                span.text-yellow-400 YouTube
+    main.max-w-6xl.mx-auto.px-4.py-6
+      block content

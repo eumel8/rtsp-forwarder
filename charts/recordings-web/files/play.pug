@@ -1,0 +1,170 @@
+extends layout
+
+block content
+  .flex.items-center.justify-between.mb-4
+    div
+      h1.text-2xl.font-bold= cam + ' / ' + file
+    .flex.gap-3
+      a.text-sm.text-gray-400(class="hover:text-gray-200" href="/cam/" + cam) &larr; back
+      a.text-sm.text-gray-400(class="hover:text-gray-200" href="/cam/" + cam + "/" + file + "/download") download
+      if ytConfigured
+        if ytConnected
+          button.text-sm.py-1.px-3.rounded.bg-red-600.text-white(class="hover:bg-red-500" type="button" id="yt-play-btn") YouTube
+        else
+          a.text-sm.py-1.px-3.rounded.bg-gray-600.text-white(class="hover:bg-gray-500" href="/connect/youtube") YouTube
+
+  .bg-black.rounded-lg.overflow-hidden
+    video.w-full(class="max-h-[80vh]" controls preload="metadata" autoplay)
+      source(src="/cam/" + cam + "/" + file + "/stream" type="video/mp4")
+
+  h2.text-lg.font-semibold.mt-6.mb-2 Details
+  dl#meta.text-sm.text-gray-300(class="grid grid-cols-1 md:grid-cols-2 gap-y-1 gap-x-6")
+    div Loading…
+
+  script.
+    (async () => {
+      const r = await fetch(location.pathname.replace(/\/play$/, '/info'));
+      const dl = document.getElementById('meta');
+      if (!r.ok) { dl.innerHTML = '<div class="text-red-400">probe failed</div>'; return; }
+      const j = await r.json();
+      if (j.error) { dl.innerHTML = '<div class="text-red-400">' + j.error + '</div>'; return; }
+      const fmtDur = (s) => {
+        if (s == null) return '?';
+        s = Math.round(s);
+        const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+        return (h ? h+'h ' : '') + String(m).padStart(2,'0') + 'm ' + String(x).padStart(2,'0') + 's';
+      };
+      const fmtBytes = (b) => {
+        if (!b && b !== 0) return '?';
+        const u = ['B','KB','MB','GB','TB']; let i=0, n=b;
+        while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+        return n.toFixed(n>=100?0:1) + ' ' + u[i];
+      };
+      const row = (k, v) => `<div><span class="text-gray-500">${k}:</span> <span class="font-mono">${v}</span></div>`;
+      const v = j.video || {}, a = j.audio;
+      dl.innerHTML = [
+        row('Duration', fmtDur(j.duration)),
+        row('Size', fmtBytes(j.size)),
+        row('Bitrate', j.bitrate ? (Math.round(j.bitrate/1000) + ' kbps') : '?'),
+        row('Resolution', v.width && v.height ? (v.width + '×' + v.height) : '?'),
+        row('Video codec', [v.codec, v.profile].filter(Boolean).join(' / ') || '?'),
+        row('FPS', v.fps ?? '?'),
+        row('Pixel format', v.pix_fmt || '?'),
+        row('Audio', a ? (a.codec + ' ' + a.channels + 'ch ' + (a.sample_rate/1000) + 'kHz') : 'none'),
+      ].join('');
+    })();
+
+  if ytConnected
+    //- YouTube Upload Modal
+    #yt-modal.fixed.inset-0.bg-black/70.flex.items-center.justify-center.hidden.z-50
+      .bg-gray-800.rounded-lg.p-6.w-full.max-w-md.mx-4.shadow-xl
+        h3.text-lg.font-bold.mb-4 Upload to YouTube
+        .mb-3
+          label.block.text-xs.text-gray-400.mb-1 Title
+          input#yt-title.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600(type="text")
+        .mb-3
+          label.block.text-xs.text-gray-400.mb-1 Description
+          textarea#yt-desc.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600(rows="3")
+        .mb-4
+          label.block.text-xs.text-gray-400.mb-1 Privacy
+          select#yt-privacy.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600
+            option(value="private") Private
+            option(value="unlisted") Unlisted
+            option(value="public") Public
+        #yt-status.hidden.mt-4
+          .text-sm.text-gray-300.mb-2
+            span#yt-status-text Uploading...
+          .w-full.bg-gray-700.rounded-full.h-2
+            #yt-progress-bar.bg-red-500.h-2.rounded-full.transition-all.duration-300(style="width:0%")
+          #yt-result.hidden.mt-3
+        .flex.gap-2.mt-4
+          button#yt-start-btn.flex-1.py-2.rounded.bg-red-600.text-sm.font-medium(class="hover:bg-red-500") Upload
+          button#yt-cancel-btn.py-2.px-4.rounded.bg-gray-600.text-sm(class="hover:bg-gray-500") Cancel
+    script.
+      (() => {
+        const modal = document.getElementById('yt-modal');
+        const titleInput = document.getElementById('yt-title');
+        const descInput = document.getElementById('yt-desc');
+        const privacySelect = document.getElementById('yt-privacy');
+        const statusDiv = document.getElementById('yt-status');
+        const statusText = document.getElementById('yt-status-text');
+        const progressBar = document.getElementById('yt-progress-bar');
+        const resultDiv = document.getElementById('yt-result');
+        const startBtn = document.getElementById('yt-start-btn');
+        const cancelBtn = document.getElementById('yt-cancel-btn');
+        let pollTimer = null;
+
+        document.getElementById('yt-play-btn').addEventListener('click', () => {
+          titleInput.value = '#{file}'.replace('.mp4', '').replace(/_/g, ' ');
+          descInput.value = '';
+          privacySelect.value = 'private';
+          statusDiv.classList.add('hidden');
+          resultDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Upload';
+          modal.classList.remove('hidden');
+        });
+
+        cancelBtn.addEventListener('click', () => { modal.classList.add('hidden'); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } });
+        modal.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.add('hidden'); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } } });
+
+        startBtn.addEventListener('click', async () => {
+          startBtn.disabled = true;
+          startBtn.textContent = 'Starting...';
+          statusDiv.classList.remove('hidden');
+          resultDiv.classList.add('hidden');
+          statusText.textContent = 'Starting upload...';
+          progressBar.style.width = '0%';
+
+          try {
+            const r = await fetch('/api/youtube/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                cam: '#{cam}',
+                file: '#{file}',
+                title: titleInput.value,
+                description: descInput.value,
+                privacy: privacySelect.value,
+              }),
+            });
+            const data = await r.json();
+            if (!r.ok) {
+              statusText.textContent = 'Error: ' + (data.error || r.status);
+              startBtn.disabled = false;
+              startBtn.textContent = 'Retry';
+              return;
+            }
+            statusText.textContent = 'Uploading... 0%';
+            pollTimer = setInterval(() => pollUpload(data.uploadId), 2000);
+          } catch (e) {
+            statusText.textContent = 'Error: ' + e.message;
+            startBtn.disabled = false;
+            startBtn.textContent = 'Retry';
+          }
+        });
+
+        async function pollUpload(id) {
+          try {
+            const r = await fetch('/api/youtube/upload/' + id);
+            const job = await r.json();
+            if (job.state === 'uploading' || job.state === 'starting') {
+              progressBar.style.width = (job.progress || 0) + '%';
+              statusText.textContent = 'Uploading... ' + (job.progress || 0) + '%';
+            } else if (job.state === 'done') {
+              clearInterval(pollTimer); pollTimer = null;
+              progressBar.style.width = '100%';
+              statusText.textContent = 'Upload complete!';
+              resultDiv.classList.remove('hidden');
+              resultDiv.innerHTML = '<a class="text-red-400 underline" href="' + job.videoUrl + '" target="_blank">' + job.videoUrl + '</a>';
+              startBtn.textContent = 'Done';
+            } else if (job.state === 'error') {
+              clearInterval(pollTimer); pollTimer = null;
+              statusText.textContent = 'Error: ' + job.error;
+              startBtn.disabled = false;
+              startBtn.textContent = 'Retry';
+            }
+          } catch {}
+        }
+      })();

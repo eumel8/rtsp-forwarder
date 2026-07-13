@@ -1,0 +1,183 @@
+extends layout
+
+block content
+  .flex.items-center.justify-between.mb-6
+    div
+      h1.text-3xl.font-bold= cam
+      p.text-sm.text-gray-400 #{files.length} recordings
+    a.text-sm.text-gray-400(class="hover:text-gray-200" href="/") &larr; back
+
+  if files.length === 0
+    p.text-gray-400 No recordings yet.
+  else
+    div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4")
+      each f in files
+        .rounded-lg.bg-gray-800.overflow-hidden.flex.flex-col(data-file=f.name)
+          a.block.relative.bg-black(href="/cam/" + cam + "/" + f.name + "/play")
+            img.w-full.h-40.object-cover.opacity-90(src="/cam/" + cam + "/" + f.name + "/thumbnail" loading="lazy" onerror="this.style.display='none'")
+            .absolute.inset-0.flex.items-center.justify-center.pointer-events-none
+              div(class="bg-black/50 rounded-full w-12 h-12 flex items-center justify-center")
+                span.text-white.text-xl ▶
+          .p-3.flex-1.flex.flex-col.gap-1
+            .text-sm.font-mono.truncate(title=f.name)= f.name
+            .text-xs.text-gray-400= new Date(f.mtime).toLocaleString()
+            .text-xs.text-gray-400= fmtSize(f.size)
+          .px-3.pb-3.flex.gap-2
+            a.flex-1.text-center.text-xs.py-1.rounded.bg-gray-700(class="hover:bg-gray-600" href="/cam/" + cam + "/" + f.name + "/play") play
+            a.text-xs.py-1.px-2.rounded.bg-gray-700(class="hover:bg-gray-600" href="/cam/" + cam + "/" + f.name + "/download") ⤓
+            if ytConfigured
+              if ytConnected
+                button.text-xs.py-1.px-2.rounded.bg-red-600(class="hover:bg-red-500" type="button" data-yt-upload=f.name title="Upload to YouTube") YT
+              else
+                a.text-xs.py-1.px-2.rounded.bg-gray-600(class="hover:bg-gray-500" href="/connect/youtube" title="YouTube verbinden") YT
+            if allowDelete
+              button.text-xs.py-1.px-2.rounded.bg-red-700(class="hover:bg-red-600" type="button" data-delete=f.name) ✕
+
+  if allowDelete
+    script.
+      document.querySelectorAll('button[data-delete]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const file = btn.dataset.delete;
+          if (!confirm('Delete ' + file + '?')) return;
+          const r = await fetch(location.pathname + '/' + encodeURIComponent(file), { method: 'DELETE' });
+          if (r.ok) {
+            btn.closest('[data-file]').remove();
+          } else {
+            const j = await r.json().catch(() => ({}));
+            alert('Delete failed: ' + (j.error || r.status));
+          }
+        });
+      });
+
+  if ytConnected
+    //- YouTube Upload Modal
+    #yt-modal.fixed.inset-0.bg-black/70.flex.items-center.justify-center.hidden.z-50
+      .bg-gray-800.rounded-lg.p-6.w-full.max-w-md.mx-4.shadow-xl
+        h3.text-lg.font-bold.mb-4 Upload to YouTube
+        .mb-3
+          label.block.text-xs.text-gray-400.mb-1 Title
+          input#yt-title.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600(type="text")
+        .mb-3
+          label.block.text-xs.text-gray-400.mb-1 Description
+          textarea#yt-desc.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600(rows="3")
+        .mb-4
+          label.block.text-xs.text-gray-400.mb-1 Privacy
+          select#yt-privacy.w-full.bg-gray-700.rounded.px-3.py-2.text-sm.text-gray-100.border.border-gray-600
+            option(value="private") Private
+            option(value="unlisted") Unlisted
+            option(value="public") Public
+        //- Upload status
+        #yt-status.hidden.mt-4
+          .text-sm.text-gray-300.mb-2
+            span#yt-status-text Uploading...
+          .w-full.bg-gray-700.rounded-full.h-2
+            #yt-progress-bar.bg-red-500.h-2.rounded-full.transition-all.duration-300(style="width:0%")
+          #yt-result.hidden.mt-3
+        //- Buttons
+        .flex.gap-2.mt-4
+          button#yt-start-btn.flex-1.py-2.rounded.bg-red-600.text-sm.font-medium(class="hover:bg-red-500") Upload
+          button#yt-cancel-btn.py-2.px-4.rounded.bg-gray-600.text-sm(class="hover:bg-gray-500") Cancel
+    script.
+      (() => {
+        const modal = document.getElementById('yt-modal');
+        const titleInput = document.getElementById('yt-title');
+        const descInput = document.getElementById('yt-desc');
+        const privacySelect = document.getElementById('yt-privacy');
+        const statusDiv = document.getElementById('yt-status');
+        const statusText = document.getElementById('yt-status-text');
+        const progressBar = document.getElementById('yt-progress-bar');
+        const resultDiv = document.getElementById('yt-result');
+        const startBtn = document.getElementById('yt-start-btn');
+        const cancelBtn = document.getElementById('yt-cancel-btn');
+        let currentFile = null;
+        let pollTimer = null;
+
+        function openModal(file) {
+          currentFile = file;
+          titleInput.value = file.replace('.mp4', '').replace(/_/g, ' ');
+          descInput.value = '';
+          privacySelect.value = 'private';
+          statusDiv.classList.add('hidden');
+          resultDiv.classList.add('hidden');
+          progressBar.style.width = '0%';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Upload';
+          modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+          modal.classList.add('hidden');
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        }
+
+        document.querySelectorAll('button[data-yt-upload]').forEach((btn) => {
+          btn.addEventListener('click', () => openModal(btn.dataset.ytUpload));
+        });
+
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        startBtn.addEventListener('click', async () => {
+          startBtn.disabled = true;
+          startBtn.textContent = 'Starting...';
+          statusDiv.classList.remove('hidden');
+          resultDiv.classList.add('hidden');
+          statusText.textContent = 'Starting upload...';
+          progressBar.style.width = '0%';
+
+          try {
+            const r = await fetch('/api/youtube/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                cam: '#{cam}',
+                file: currentFile,
+                title: titleInput.value,
+                description: descInput.value,
+                privacy: privacySelect.value,
+              }),
+            });
+            const data = await r.json();
+            if (!r.ok) {
+              statusText.textContent = 'Error: ' + (data.error || r.status);
+              startBtn.disabled = false;
+              startBtn.textContent = 'Retry';
+              return;
+            }
+            statusText.textContent = 'Uploading... 0%';
+            pollTimer = setInterval(() => pollUpload(data.uploadId), 2000);
+          } catch (e) {
+            statusText.textContent = 'Error: ' + e.message;
+            startBtn.disabled = false;
+            startBtn.textContent = 'Retry';
+          }
+        });
+
+        async function pollUpload(id) {
+          try {
+            const r = await fetch('/api/youtube/upload/' + id);
+            const job = await r.json();
+            if (job.state === 'uploading' || job.state === 'starting') {
+              const pct = job.progress || 0;
+              progressBar.style.width = pct + '%';
+              statusText.textContent = 'Uploading... ' + pct + '%';
+            } else if (job.state === 'done') {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              progressBar.style.width = '100%';
+              statusText.textContent = 'Upload complete!';
+              resultDiv.classList.remove('hidden');
+              resultDiv.innerHTML = '<a class="text-red-400 underline" href="' + job.videoUrl + '" target="_blank">' + job.videoUrl + '</a>';
+              startBtn.textContent = 'Done';
+            } else if (job.state === 'error') {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              statusText.textContent = 'Error: ' + job.error;
+              startBtn.disabled = false;
+              startBtn.textContent = 'Retry';
+            }
+          } catch {
+            // transient network error, keep polling
+          }
+        }
+      })();
