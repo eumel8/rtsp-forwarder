@@ -325,6 +325,10 @@ function startYouTubeUpload(filePath, metadata) {
 
 app.get('/healthz', (_req, res) => res.send('ok'));
 
+app.get('/legal', (_req, res) => {
+  res.render('legal');
+});
+
 app.get('/', async (_req, res) => {
   const cams = await listCameras();
   const summary = await Promise.all(

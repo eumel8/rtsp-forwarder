@@ -1,0 +1,80 @@
+extends layout
+
+block content
+  .max-w-3xl.mx-auto
+    h1.text-3xl.font-bold.mb-6 App Informationen
+
+    //- App-Beschreibung
+    section.mb-10
+      h2.text-xl.font-bold.mb-3 App-Beschreibung
+      p.text-gray-300.mb-3
+        | CCTV Recordings ist eine Web-Anwendung zur Verwaltung und Wiedergabe von Kamera-Aufnahmen.
+        | Die YouTube-Upload-Funktion ermöglicht es autorisierten Benutzern, aufgenommene Videos direkt
+        | über die Web-Oberfläche auf ihren persönlichen YouTube-Kanal hochzuladen.
+      h3.text-lg.font-semibold.mt-4.mb-2 Funktionsumfang
+      ul.list-disc.list-inside.text-gray-300.space-y-1
+        li Durchsuchen und Abspielen von Kamera-Aufnahmen
+        li Download von Aufnahmen
+        li Upload von Aufnahmen auf den verknüpften YouTube-Kanal
+        li Verwaltung der YouTube-Verbindung (Verbinden/Trennen)
+      h3.text-lg.font-semibold.mt-4.mb-2 YouTube-Berechtigungen
+      p.text-gray-300
+        | Die App beantragt den Zugriff auf YouTube im Umfang
+        | #[code https://www.googleapis.com/auth/youtube.upload].
+        | Dies wird ausschließlich zum Hochladen von Videos auf den vom Benutzer
+        | verknüpften YouTube-Kanal verwendet. Es werden keine weiteren YouTube-Daten
+        | gelesen, verändert oder gelöscht.
+
+    //- Datenschutzerklärung
+    section.mb-10
+      h2.text-xl.font-bold.mb-3 Datenschutzerklärung
+      h3.text-lg.font-semibold.mt-4.mb-2 Verantwortlicher
+      p.text-gray-300
+        | Verantwortlicher für die Datenverarbeitung auf dieser Website ist der Betreiber
+        | der CCTV-Anlage. Kontakt über die im Impressum angegebene Adresse.
+      h3.text-lg.font-semibold.mt-4.mb-2 Erhobene Daten
+      ul.list-disc.list-inside.text-gray-300.space-y-1
+        li Google-Account-Name und YouTube-Kanalname (nach OAuth-Verbindung)
+        li OAuth-Zugriffstoken und Refresh-Token (serverseitig gespeichert)
+        li Aufnahmedaten (MP4-Dateien der angeschlossenen Kameras)
+      h3.text-lg.font-semibold.mt-4.mb-2 Zweck der Datenverarbeitung
+      p.text-gray-300
+        | Die OAuth-Daten werden ausschließlich zum Authentifizieren und Autorisieren
+        | des YouTube-Uploads gespeichert. Es findet keine Weitergabe an Dritte statt.
+        | Die Aufnahmedaten werden ausschließlich lokal gespeichert und nicht an externe
+        | Dienste übermittelt, sofern kein expliziter YouTube-Upload durch den Benutzer
+        | ausgelöst wird.
+      h3.text-lg.font-semibold.mt-4.mb-2 Speicherdauer
+      p.text-gray-300
+        | OAuth-Token werden gespeichert, bis der Benutzer die YouTube-Verbindung trennt.
+        | Aufnahmen werden gemäß der konfigurierten Aufbewahrungsfrist gespeichert.
+      h3.text-lg.font-semibold.mt-4.mb-2 Betroffenenrechte
+      p.text-gray-300
+        | Sie haben das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung
+        | der Verarbeitung Ihrer personenbezogenen Daten. Sie können die
+        | YouTube-Verbindung jederzeit über die App trennen, wodurch alle gespeicherten
+        | OAuth-Token gelöscht werden.
+
+    //- Nutzungsbedingungen
+    section.mb-10
+      h2.text-xl.font-bold.mb-3 Nutzungsbedingungen
+      h3.text-lg.font-semibold.mt-4.mb-2 Geltungsbereich
+      p.text-gray-300
+        | Diese Nutzungsbedingungen gelten für die Nutzung der CCTV Recordings
+        | Web-Anwendung. Durch die Nutzung der App stimmen Sie diesen Bedingungen zu.
+      h3.text-lg.font-semibold.mt-4.mb-2 YouTube-Nutzung
+      ul.list-disc.list-inside.text-gray-300.space-y-1
+        li Der Upload erfolgt ausschließlich auf den eigenständig verknüpften YouTube-Kanal.
+        li Der Nutzer ist für die Rechtmäßigkeit der hochgeladenen Videos verantwortlich.
+        li Die App übernimmt keine Haftung für Verletzungen der YouTube-Nutzungsbedingungen
+          |  durch den Nutzer.
+        li Der Nutzer kann die YouTube-Verbindung jederzeit über die App trennen.
+      h3.text-lg.font-semibold.mt-4.mb-2 Haftung
+      p.text-gray-300
+        | Die App wird ohne Gewähr bereitgestellt. Der Betreiber haftet nicht für
+        | Datenverluste, Unterbrechungen oder Schäden, die durch die Nutzung der
+        | App entstehen.
+      h3.text-lg.font-semibold.mt-4.mb-2 Änderungen
+      p.text-gray-300
+        | Der Betreiber behält sich vor, diese Nutzungsbedingungen jederzeit zu
+        | ändern. Änderungen werden auf dieser Seite veröffentlicht.

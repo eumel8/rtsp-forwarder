@@ -2,7 +2,7 @@ apiVersion: v2
 name: recordings-web
 description: Web UI to browse, play and delete recorded camera MP4 segments
 type: application
-version: 0.6.0
+version: 0.7.0
 appVersion: "1.0.0"
 keywords:
   - cctv
