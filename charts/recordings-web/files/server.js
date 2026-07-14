@@ -496,7 +496,7 @@ app.post('/api/youtube/connect', async (req, res) => {
       const r = await youtube.channels.list({ part: ['snippet'], mine: true });
       channelName = r.data.items?.[0]?.snippet?.title || null;
     } catch { /* ignore */ }
-    await writeYtToken({ refresh_token: tokens.refresh_token, channel_name: channelName });
+    await writeYtToken({ refresh_token: tokenData.refresh_token, channel_name: channelName });
     res.json({ ok: true, channelName });
   } catch (e) {
     res.status(500).json({ error: 'Token exchange failed: ' + e.message });
