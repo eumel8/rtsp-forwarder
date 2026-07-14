@@ -110,6 +110,7 @@ block content
         modal.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.add('hidden'); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } } });
 
         startBtn.addEventListener('click', async () => {
+          if (startBtn.textContent === 'Done') { modal.classList.add('hidden'); if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } return; }
           startBtn.disabled = true;
           startBtn.textContent = 'Starting...';
           statusDiv.classList.remove('hidden');

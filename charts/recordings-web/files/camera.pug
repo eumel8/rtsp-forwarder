@@ -118,6 +118,7 @@ block content
         modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
         startBtn.addEventListener('click', async () => {
+          if (startBtn.textContent === 'Done') { closeModal(); return; }
           startBtn.disabled = true;
           startBtn.textContent = 'Starting...';
           statusDiv.classList.remove('hidden');
