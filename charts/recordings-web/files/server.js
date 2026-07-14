@@ -466,15 +466,31 @@ app.post('/api/youtube/connect', async (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Missing code' });
   try {
-    const oauth2 = getOAuth2Client();
-    const { tokens } = await oauth2.getToken(code);
-    if (!tokens.refresh_token) {
+    // Direct token exchange for better error messages
+    const params = new URLSearchParams({
+      code,
+      client_id: YT_CLIENT_ID,
+      client_secret: YT_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+    });
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const tokenData = await tokenRes.json();
+    console.log('Google token response:', JSON.stringify(tokenData));
+    if (!tokenRes.ok || !tokenData.access_token) {
+      return res.status(400).json({ error: 'Token exchange failed: ' + (tokenData.error_description || tokenData.error || JSON.stringify(tokenData)) });
+    }
+    if (!tokenData.refresh_token) {
       return res.status(400).json({ error: 'No refresh token received. Try again with a different Google account or revoke access first at myaccount.google.com/permissions.' });
     }
     // Fetch channel name
     let channelName = null;
     try {
-      oauth2.setCredentials({ access_token: tokens.access_token });
+      const oauth2 = getOAuth2Client();
+      oauth2.setCredentials({ access_token: tokenData.access_token });
       const youtube = google.youtube({ version: 'v3', auth: oauth2 });
       const r = await youtube.channels.list({ part: ['snippet'], mine: true });
       channelName = r.data.items?.[0]?.snippet?.title || null;
