@@ -463,7 +463,7 @@ app.post('/api/youtube/connect', async (req, res) => {
   if (!YT_CLIENT_ID || !YT_CLIENT_SECRET) {
     return res.status(400).json({ error: 'YouTube not configured' });
   }
-  const { code } = req.body || {};
+  const { code, origin } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Missing code' });
   try {
     // Direct token exchange for better error messages
@@ -472,6 +472,7 @@ app.post('/api/youtube/connect', async (req, res) => {
       client_id: YT_CLIENT_ID,
       client_secret: YT_CLIENT_SECRET,
       grant_type: 'authorization_code',
+      redirect_uri: origin || 'postmessage',
     });
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
